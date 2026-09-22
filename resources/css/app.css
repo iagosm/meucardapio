@@ -1,3 +1,36 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+        scroll-behavior: smooth;
+    }
+
+    /* Evita o flash dos blocos controlados por x-show antes do Alpine iniciar. */
+    [x-cloak] {
+        display: none !important;
+    }
+}
+
+@layer utilities {
+    /* Carrosséis horizontais (categorias) roláveis sem barra visível. */
+    .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Respeita a home bar do iOS em barras fixas no rodapé. */
+    .pb-safe {
+        padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+    }
+
+    .bottom-safe {
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+    }
+}

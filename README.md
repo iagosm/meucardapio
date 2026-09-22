@@ -1,58 +1,110 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Cardápio Digital
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+> **Projeto de estudo** — construído para aprender e praticar, na prática, um conjunto específico de tecnologias e conceitos (listados abaixo). O produto em si (um cardápio digital) é o veículo; o objetivo real é o aprendizado.
 
-## About Laravel
+Sistema de cardápio digital genérico (hamburgueria, açaiteria, pizzaria, etc.) para portfólio. Lojista cadastra categorias, produtos e grupos de complementos; cliente navega, monta o pedido e envia — sem pagamento online, combinado à parte na entrega/retirada.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Objetivos de aprendizado
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Este projeto foi desenhado especificamente para praticar:
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Mensageria com Kafka** — desacoplar o fluxo de criação de pedido usando producer/consumer, entender tópicos, consumer groups e (mais adiante) confiabilidade de entrega (dual write problem, idempotência)
+- **Docker** — subir e orquestrar serviços locais (MySQL + Kafka) via `docker-compose`, sem depender de instalação nativa na máquina
+- **SOLID / Clean Code** — aplicar os 5 princípios na prática: Services isolados (`PricingService`), Repository Pattern com interfaces (Dependency Inversion), Controllers enxutos que só orquestram
+- **Laravel "puro"** — Blade + Ajax, sem framework JS (Vue/React), pra fixar fundamentos antes de adicionar complexidade de front
+- **Modelagem de domínio flexível** — catálogo genérico (categorias → produtos → grupos de complementos reutilizáveis), em vez de hardcoded para um único nicho
+- **Multi-tenancy** *(previsto)* — evoluir de loja única para várias lojas na mesma instância: escopo por tenant, isolamento de dados e resolução da loja a partir da request
+- *(Opcional, se sobrar tempo)* **WebSocket/Reverb** — broadcasting em tempo real como extensão do que o Kafka já desacoplou
 
-## Learning Laravel
+## Funcionalidades
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+**Área pública (cliente)**
+- Catálogo por categorias, com busca
+- Detalhe do produto com grupos de complementos (obrigatórios e opcionais, com mín/máx de seleção)
+- Carrinho com cupom de desconto
+- Checkout sem cadastro formal — identificação do cliente por telefone
+- Confirmação de pedido
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+**Painel do lojista (admin)**
+- Login
+- Visão geral (métricas do dia)
+- Pedidos em kanban (recebido → preparo → pronto → entregue)
+- Gestão de categorias e produtos
+- Configurações da loja (horário, endereço, taxa de entrega)
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## Stack
 
-## Agentic Development
+- **Backend:** Laravel + Blade + Ajax (sem framework JS)
+- **Autenticação:** Laravel Breeze
+- **Mensageria:** Kafka (via `junges/laravel-kafka`), rodando localmente via Docker
+- **Tempo real (opcional/futuro):** Laravel Reverb
+- **Banco:** MySQL (via Docker)
+- **Qualidade de código:** Laravel Pint
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Decisões de escopo (e por quê)
 
-```bash
-composer require laravel/boost --dev
+- **Sem pagamento online.** Pagamento é combinado na entrega/retirada (Pix, dinheiro ou cartão na maquininha), como funciona a maioria dos cardápios digitais do mercado. Evita a complexidade de lidar com dados de cartão sem necessidade real pro caso de uso — e mantém o foco nos objetivos de aprendizado acima, não em integração de pagamento.
+- **Sem cadastro obrigatório do cliente.** Reduz fricção no pedido. O cliente é identificado pelo telefone no checkout, o que já viabiliza histórico de pedidos e abre espaço para fidelização futura, sem exigir login.
+- **Sem WebSocket no MVP.** O dashboard de pedidos atualiza via polling (Ajax a cada 10-15s). Reverb/WebSocket fica como extensão opcional — ver [Roadmap](#roadmap).
 
-php artisan boost:install
+## Arquitetura: onde o Kafka entra
+
+```mermaid
+flowchart LR
+  A[Cliente confirma pedido] --> B[Controller salva no banco]
+  B --> C[Producer publica no tópico 'pedidos']
+  C --> D[Consumer escuta o tópico]
+  D --> E[Reage: loga, atualiza status, prepara notificação]
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+O Kafka desacopla o que acontece depois que um pedido é criado — outras partes do sistema podem reagir ao evento sem o Controller precisar conhecer cada uma delas. É o ponto central de estudo de mensageria neste projeto.
 
-## Contributing
+## Boas práticas de código
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+- **SOLID** aplicado nas camadas de serviço (`PricingService` isolado do cálculo de preço) e acesso a dados (Repository Pattern com interface, seguindo Dependency Inversion)
+- Controllers enxutos — apenas orquestram, sem lógica de negócio
+- Formatação padronizada com `laravel/pint`
 
-## Code of Conduct
+## Modelagem do banco
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+`lojas` · `categorias` · `produtos` · `grupos_complementos` · `opcoes_complemento` · `produto_grupo` (pivot) · `clientes` · `pedidos` · `itens_pedido` · `item_pedido_opcoes` · `cupons` (opcional)
 
-## Security Vulnerabilities
+## Como rodar localmente
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+git clone <repo>
+cd cardapio
+composer install
+cp .env.example .env
+php artisan key:generate
 
-## License
+docker-compose up -d   # MySQL + Kafka
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+php artisan migrate --seed
+php artisan serve
+```
+
+## Multi-tenancy (previsto)
+
+Hoje o sistema roda como **loja única**. A evolução planejada é torná-lo multi-tenant: várias lojas na mesma instância, cada uma com seu próprio catálogo, pedidos, cupons e configurações, isoladas entre si.
+
+A modelagem já foi desenhada com isso em mente — `lojas` é a tabela âncora, e as demais entidades do catálogo pendem dela. O que ainda precisa ser decidido e implementado:
+
+- **Estratégia de isolamento** — banco compartilhado com `loja_id` + global scope no Eloquent, ou um banco por tenant
+- **Resolução do tenant** — subdomínio (`loja.dominio.com`), domínio próprio ou slug na URL (`/loja/hamburgueria-hut`)
+- **Escopo automático nas queries** — garantir que nenhuma consulta vaze dados entre lojas, inclusive nos jobs e consumers do Kafka
+- **Isolamento de storage** — imagens de produto e banner separados por loja
+- **Particionamento das mensagens** — usar a loja como chave de partição no Kafka, para preservar a ordem dos eventos por tenant
+
+Até lá, todo o código assume uma única loja.
+
+## Roadmap
+
+- [ ] Multi-tenancy (múltiplas lojas na mesma plataforma) — ver [Multi-tenancy (previsto)](#multi-tenancy-previsto)
+- [ ] Reverb/WebSocket para o dashboard atualizar em tempo real
+- [ ] Cupons e promoções
+- [ ] Confiabilidade de mensageria (Transactional Outbox, idempotência de consumer)
+- [ ] Deploy (Railway/Render)
+
+## Screenshots
+
